@@ -1,0 +1,123 @@
+service: user-service
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: eu-west-1
+  stage: ${opt:stage, 'dev'}
+  environment:
+    USER_UPSERT_QUEUE_URL:
+      Ref: UserUpsertQueue
+    USER_TABLE: users-${self:provider.stage}
+
+
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+      Resource:
+        - Fn::GetAtt:
+            - UserUpsertQueue
+            - Arn
+
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:Query
+        - dynamodb:Scan
+      Resource:
+        - Fn::Sub: arn:aws:dynamodb:${self:provider.region}:*:table/users-${self:provider.stage}
+        - Fn::Sub: arn:aws:dynamodb:${self:provider.region}:*:table/users-${self:provider.stage}/*
+
+functions:
+  userUpsert:
+    handler: src/handlers/userUpsert.userUpsert
+    memorySize: 256
+    timeout: 10
+    events:
+      - httpApi:
+          path: /user-upsert
+          method: POST
+
+  userUpsertConsumer:
+    handler: src/consumers/userConsumer.userUpsertConsumer
+    memorySize: 512
+    timeout: 30
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - UserUpsertQueue
+              - Arn
+          batchSize: 5
+    environment:
+      USER_TABLE: ${self:provider.environment.USER_TABLE}
+
+  getUser:
+    handler: src/handlers/userGet.getUser
+    memorySize: 256
+    timeout: 10
+    events:
+      - httpApi:
+          path: /user/{uuid}
+          method: GET
+
+  listUsers:
+    handler: src/handlers/usersList.listUsersHandler
+    memorySize: 256
+    timeout: 10
+    events:
+      - httpApi:
+          path: /users
+          method: GET
+
+resources:
+  Resources:
+    UserUpsertQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${self:service}-${self:provider.stage}-user-upsert-queue
+        VisibilityTimeout: 60
+        MessageRetentionPeriod: 1209600
+
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: users-${self:provider.stage}
+        AttributeDefinitions:
+          - AttributeName: uuid
+            AttributeType: S
+          - AttributeName: fullName
+            AttributeType: S
+          - AttributeName: entity
+            AttributeType: S
+        KeySchema:
+          - AttributeName: uuid
+            KeyType: HASH
+          - AttributeName: fullName
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        GlobalSecondaryIndexes:
+          - IndexName: fullNameIndex
+            KeySchema:
+              - AttributeName: entity
+                KeyType: HASH
+              - AttributeName: fullName
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
+  Outputs:
+    UserUpsertQueueUrl:
+      Value:
+        Ref: UserUpsertQueue
+      Export:
+        Name: ${self:service}-${self:provider.stage}-UserUpsertQueueUrl
+
+    UsersTableName:
+      Value: users-${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-UsersTableName
