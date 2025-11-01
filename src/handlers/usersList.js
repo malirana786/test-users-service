@@ -1,8 +1,12 @@
 import { listUsers } from "../services/userService.js";
+import { bindLogContext } from "../utils/logger.js";
 
 const TABLE = process.env.USER_TABLE;
 
 export const listUsersHandler = async (event) => {
+  const log = bindLogContext({ function: "listUsersHandler" });
+  log.info("Listing users", { queryParams: event.queryStringParameters });
+
   try {
     const q = event.queryStringParameters || {};
     const limit = q.limit ? Math.max(1, Math.min(100, parseInt(q.limit, 10))) : 10;
@@ -19,10 +23,11 @@ export const listUsersHandler = async (event) => {
       gender,
       sort
     });
+    log.info("Users listed successfully", { result });
 
     return jsonResponse(200, result);
   } catch (err) {
-    console.error("listUsers error:", err);
+    log.error("listUsers error:", err);
     return jsonResponse(500, { error: "Internal Server Error", details: err.message });
   }
 };

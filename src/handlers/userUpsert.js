@@ -1,5 +1,6 @@
 import Joi from "joi";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
+import { bindLogContext } from "../utils/logger.js";
 
 const REGION = process.env.AWS_REGION || "eu-west-1";
 const QUEUE_URL = process.env.USER_UPSERT_QUEUE_URL;
@@ -14,10 +15,14 @@ const schema = Joi.object({
 }).options({ abortEarly: false, stripUnknown: true });
 
 export const userUpsert = async (event) => {
+  const log = bindLogContext({ function: "userUpsert" });
+  log.info("Received user upsert request", { body: event.body });
+
   try {
     const body = event.body ? JSON.parse(event.body) : {};
     const { value, error } = schema.validate(body);
     if (error) {
+      log.warn("Validation failed", { details: error.details.map(d => d.message) });
       return jsonResponse(422, { error: "Validation failed", details: error.details.map(d => d.message) });
     }
 
@@ -38,10 +43,10 @@ export const userUpsert = async (event) => {
     });
 
     const res = await sqs.send(cmd);
-    console.log(`Enqueued user upsert message, MessageId: ${res.MessageId}`);
+    log.info(`Enqueued user upsert message, MessageId: ${res.MessageId}`);
     return jsonResponse(202, { status: "accepted", messageId: res.MessageId });
   } catch (err) {
-    console.error("userUpsert error:", err);
+    log.error("userUpsert error:", err);
     return jsonResponse(500, { error: "Internal Server Error", details: err.message });
   }
 };

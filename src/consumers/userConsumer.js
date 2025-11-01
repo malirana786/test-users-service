@@ -1,11 +1,14 @@
 import { PutCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from "../utils/dynamo.js";
 import { v4 as uuidv4 } from "uuid";
+import { bindLogContext } from "../utils/logger.js";
 
 const TABLE = process.env.USER_TABLE;
 
 export const userUpsertConsumer = async (event) => {
-  console.log(`Consumer: received ${event.Records.length} records`);
+  const log = bindLogContext({ function: "userUpsertConsumer" });
+
+  log.info(`Consumer: received ${event.Records.length} records`);
   for (const rec of event.Records) {
     try {
       const msg = JSON.parse(rec.body);
@@ -33,9 +36,9 @@ export const userUpsertConsumer = async (event) => {
       });
 
       await docClient.send(cmd);
-      console.log(`Upserted user ${fullName} (${uuid})`);
+      log.info(`Upserted user ${fullName} (${uuid})`);
     } catch (err) {
-      console.error("Consumer record processing failed:", err);
+      log.error("Consumer record processing failed:", err);
       // Do not swallow serious errors silently; rethrow to trigger Lambda retry if desired.
       // For now we continue to next record; consider pushing failed records to DLQ in infra.
     }
