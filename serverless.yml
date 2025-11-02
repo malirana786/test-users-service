@@ -11,6 +11,14 @@ provider:
       Ref: UserUpsertQueue
     USER_TABLE: users-${self:provider.stage}
 
+  httpApi:
+    authorizers:
+      cognitoAuth:
+        type: jwt
+        identitySource: "$request.header.Authorization"
+        issuerUrl: https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_IQxLk7Nm9
+        audience:
+          - 7toodq592bbeq5locjvcrjesad
 
   iamRoleStatements:
     - Effect: Allow
@@ -41,6 +49,8 @@ functions:
       - httpApi:
           path: /user-upsert
           method: POST
+          authorizer:
+            name: cognitoAuth
 
   userUpsertConsumer:
     handler: src/consumers/userConsumer.userUpsertConsumer
@@ -64,6 +74,8 @@ functions:
       - httpApi:
           path: /user/{uuid}
           method: GET
+          authorizer:
+            name: cognitoAuth
 
   listUsers:
     handler: src/handlers/usersList.listUsersHandler
@@ -73,6 +85,8 @@ functions:
       - httpApi:
           path: /users
           method: GET
+          authorizer:
+            name: cognitoAuth
 
 resources:
   Resources:
